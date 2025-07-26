@@ -1,55 +1,49 @@
-from flask import Flask, request, jsonify, send_from_directory
-from yt_dlp import YoutubeDL
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import yt_dlp
 import os
-import re
+import uuid
 
 app = Flask(__name__)
-DOWNLOAD_FOLDER = "downloads"
-os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
+CORS(app)
 
-# Helper function to sanitize filename
-def slugify(value):
-    return re.sub(r'[^a-zA-Z0-9_-]', '_', value)
+@app.route("/")
+def home():
+    return "✅ Video Downloader Backend is running!"
 
 @app.route("/api/download", methods=["POST"])
 def download_video():
-    url = request.json.get("url")
-    if not url:
-        return jsonify({"status": "error", "message": "No URL provided"}), 400
+    data = request.get_json()
+    video_url = data.get("url")
+
+    if not video_url:
+        return jsonify({"status": "error", "message": "Missing video URL"}), 400
 
     try:
+        filename = f"{uuid.uuid4()}.mp4"
+        output_path = os.path.join("downloads", filename)
+
         ydl_opts = {
-            "outtmpl": f"{DOWNLOAD_FOLDER}/%(title).80s.%(ext)s",
-            "format": "best",
+            'format': 'best',
+            'outtmpl': output_path,
         }
 
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            filename = ydl.prepare_filename(info)
-            filename = os.path.basename(filename)
-            safe_filename = slugify(filename)
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(video_url, download=True)
+            title = info.get("title", "Video")
 
-            # Rename the file safely
-            old_path = os.path.join(DOWNLOAD_FOLDER, filename)
-            new_path = os.path.join(DOWNLOAD_FOLDER, safe_filename)
-            os.rename(old_path, new_path)
+        download_url = f"https://video-downloader-n7xr.onrender.com/downloads/{filename}"
 
         return jsonify({
             "status": "success",
-            "filename": safe_filename,
-            "title": info.get("title", "Downloaded Video")
+            "title": title,
+            "download_url": download_url
         })
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.route("/downloads/<path:filename>")
-def serve_video(filename):
-    return send_from_directory(DOWNLOAD_FOLDER, filename, as_attachment=True)
-
-@app.route("/")
-def index():
-    return send_from_directory(".", "index.html")
-
 if __name__ == "__main__":
-    app.run(debug=True)
+    if not os.path.exists("downloads"):
+        os.makedirs("downloads")
+    app.run(host="0.0.0.0", port=5000)
