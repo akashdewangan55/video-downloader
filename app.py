@@ -20,14 +20,11 @@ def download_video():
 
     try:
         ydl_opts = {
-    'format': 'best',
-    'outtmpl': os.path.join(DOWNLOAD_DIR, '%(title)s.%(ext)s'),
-    'extractor_args': {
-        'youtube': [
-            'player_client=android'  # Pretend to be Android client, sometimes bypasses captcha/login
-        ]
-    }
-}
+            'format': 'best',
+            'outtmpl': os.path.join(DOWNLOAD_DIR, '%(title)s.%(ext)s'),
+            # Optional: include cookies if needed
+            # 'cookiefile': 'cookies.txt'
+        }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
