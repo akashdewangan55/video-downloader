@@ -1,11 +1,12 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import yt_dlp
 import os
 
 app = Flask(__name__)
-CORS(app)  # Allows frontend to access backend
+CORS(app)  # Enable CORS
 
+# Directory to save downloaded videos
 DOWNLOAD_DIR = "downloads"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
@@ -20,7 +21,9 @@ def download_video():
     try:
         ydl_opts = {
             'format': 'best',
-            'outtmpl': os.path.join(DOWNLOAD_DIR, '%(title)s.%(ext)s')
+            'outtmpl': os.path.join(DOWNLOAD_DIR, '%(title)s.%(ext)s'),
+            # Optional: include cookies if needed
+            # 'cookiefile': 'cookies.txt'
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -31,11 +34,16 @@ def download_video():
         return jsonify({
             "status": "success",
             "title": title,
-            "filename": os.path.basename(filename)
+            "filename": os.path.basename(filename),
+            "downloadUrl": f"/downloads/{os.path.basename(filename)}"
         })
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/downloads/<path:filename>')
+def serve_download(filename):
+    return send_from_directory(DOWNLOAD_DIR, filename, as_attachment=True)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
