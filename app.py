@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, jsonify
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 import yt_dlp
 import os
@@ -9,10 +9,6 @@ CORS(app)
 DOWNLOAD_DIR = "downloads"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-@app.route('/')
-def index():
-    return render_template("index.html")
-
 @app.route('/api/download', methods=['POST'])
 def download_video():
     data = request.json
@@ -21,18 +17,19 @@ def download_video():
     if not url:
         return jsonify({"status": "error", "message": "URL is required"}), 400
 
-    # Redirect to external service for Facebook
-    if "facebook.com" in url:
+    # Redirect Facebook URLs to external site
+    if "facebook.com" in url or "fb.watch" in url:
         return jsonify({
             "status": "redirect",
             "redirect_url": f"https://www.savefrom.net/{url}"
-        })
+        }), 200
 
     try:
         ydl_opts = {
             'format': 'best',
             'outtmpl': os.path.join(DOWNLOAD_DIR, '%(title)s.%(ext)s'),
             'quiet': True,
+            'noplaylist': True,
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -47,7 +44,19 @@ def download_video():
         })
 
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        error_msg = str(e)
+
+        # Friendly error for broken extractors
+        if "facebook" in error_msg.lower():
+            return jsonify({
+                "status": "error",
+                "message": "Facebook videos are not currently supported. Please use SaveFrom.net or fbdown.net."
+            }), 500
+
+        return jsonify({
+            "status": "error",
+            "message": f"Download failed: {error_msg}"
+        }), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000)
