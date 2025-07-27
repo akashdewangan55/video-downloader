@@ -1,4 +1,4 @@
 flask
 flask-cors
-requests
+yt-dlp>=2024.07.14
 gunicorn
