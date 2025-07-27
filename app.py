@@ -1,14 +1,17 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, render_template, jsonify
 from flask_cors import CORS
 import yt_dlp
 import os
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS
+CORS(app)
 
-# Directory to save downloaded videos
 DOWNLOAD_DIR = "downloads"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+
+@app.route('/')
+def index():
+    return render_template("index.html")
 
 @app.route('/api/download', methods=['POST'])
 def download_video():
@@ -18,12 +21,18 @@ def download_video():
     if not url:
         return jsonify({"status": "error", "message": "URL is required"}), 400
 
+    # Redirect to external service for Facebook
+    if "facebook.com" in url:
+        return jsonify({
+            "status": "redirect",
+            "redirect_url": f"https://www.savefrom.net/{url}"
+        })
+
     try:
         ydl_opts = {
             'format': 'best',
             'outtmpl': os.path.join(DOWNLOAD_DIR, '%(title)s.%(ext)s'),
-            # Optional: include cookies if needed
-            # 'cookiefile': 'cookies.txt'
+            'quiet': True,
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -34,16 +43,11 @@ def download_video():
         return jsonify({
             "status": "success",
             "title": title,
-            "filename": os.path.basename(filename),
-            "downloadUrl": f"/downloads/{os.path.basename(filename)}"
+            "filename": os.path.basename(filename)
         })
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.route('/downloads/<path:filename>')
-def serve_download(filename):
-    return send_from_directory(DOWNLOAD_DIR, filename, as_attachment=True)
-
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(debug=True)
