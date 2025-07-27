@@ -1,54 +1,47 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory, render_template
 from flask_cors import CORS
-import requests
+import yt_dlp, os
 
 app = Flask(__name__)
 CORS(app)
 
+DOWNLOAD_DIR = "downloads"
+os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+
+@app.route('/')
+def home():
+    return render_template("index.html")
 
 @app.route('/api/download', methods=['POST'])
 def download_video():
-    data = request.get_json()
+    data = request.json
     url = data.get('url')
-
     if not url:
         return jsonify({"status": "error", "message": "URL is required"}), 400
 
     try:
-        # Facebook Video → SnapSave
-        if "facebook.com" in url or "fb.watch" in url:
-            snap_response = requests.post(
-                "https://snapsave.app/action.php?lang=en",
-                data={"url": url}
-            )
-            if snap_response.status_code == 200 and "url" in snap_response.text:
-                return jsonify({
-                    "status": "success",
-                    "source": "snapsave",
-                    "html": snap_response.text
-                })
-            else:
-                return jsonify({"status": "error", "message": "SnapSave failed"}), 500
+        ydl_opts = {
+            'format': 'best',
+            'outtmpl': os.path.join(DOWNLOAD_DIR, '%(title)s.%(ext)s')
+        }
 
-        # YouTube Video → Y2Mate Unofficial API
-        elif "youtube.com" in url or "youtu.be" in url:
-            api_url = "https://api.vevioz.com/api/button/mp3/"  # or /mp4/
-            response = requests.get(f"{api_url}{url}")
-            if response.status_code == 200:
-                return jsonify({
-                    "status": "success",
-                    "source": "y2mate",
-                    "html": response.text
-                })
-            else:
-                return jsonify({"status": "error", "message": "Y2Mate failed"}), 500
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            filename = ydl.prepare_filename(info)
+            title = info.get("title", "Video")
 
-        else:
-            return jsonify({"status": "error", "message": "Unsupported URL"}), 400
+        return jsonify({
+            "status": "success",
+            "title": title,
+            "filename": os.path.basename(filename)
+        })
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@app.route('/downloads/<path:filename>')
+def download_file(filename):
+    return send_from_directory(DOWNLOAD_DIR, filename)
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host='0.0.0.0', port=5000)
