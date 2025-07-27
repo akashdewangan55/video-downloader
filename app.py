@@ -1,7 +1,8 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
-import yt_dlp
+from yt_dlp import YoutubeDL
 import os
+import uuid
 
 app = Flask(__name__)
 CORS(app)
@@ -11,52 +12,36 @@ os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 @app.route('/api/download', methods=['POST'])
 def download_video():
-    data = request.json
-    url = data.get('url')
+    data = request.get_json()
+    if not data or 'url' not in data:
+        return jsonify({"status": "error", "message": "No URL provided"}), 400
 
-    if not url:
-        return jsonify({"status": "error", "message": "URL is required"}), 400
-
-    # Redirect Facebook URLs to external site
-    if "facebook.com" in url or "fb.watch" in url:
-        return jsonify({
-            "status": "redirect",
-            "redirect_url": f"https://www.savefrom.net/{url}"
-        }), 200
+    url = data['url']
+    filename = str(uuid.uuid4()) + ".mp4"
+    filepath = os.path.join(DOWNLOAD_DIR, filename)
 
     try:
         ydl_opts = {
+            'outtmpl': filepath,
             'format': 'best',
-            'outtmpl': os.path.join(DOWNLOAD_DIR, '%(title)s.%(ext)s'),
             'quiet': True,
-            'noplaylist': True,
         }
-
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        with YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
-            filename = ydl.prepare_filename(info)
-            title = info.get("title", "Video")
-
-        return jsonify({
-            "status": "success",
-            "title": title,
-            "filename": os.path.basename(filename)
-        })
-
-    except Exception as e:
-        error_msg = str(e)
-
-        # Friendly error for broken extractors
-        if "facebook" in error_msg.lower():
             return jsonify({
-                "status": "error",
-                "message": "Facebook videos are not currently supported. Please use SaveFrom.net or fbdown.net."
-            }), 500
-
+                "status": "success",
+                "title": info.get('title', 'Untitled'),
+                "filename": filename
+            })
+    except Exception as e:
         return jsonify({
             "status": "error",
-            "message": f"Download failed: {error_msg}"
+            "message": str(e)
         }), 500
 
+@app.route('/downloads/<path:filename>')
+def serve_download(filename):
+    return send_from_directory(DOWNLOAD_DIR, filename)
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run()
